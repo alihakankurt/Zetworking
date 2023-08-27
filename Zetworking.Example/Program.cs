@@ -7,9 +7,16 @@ var server = new Server();
 server.Start(port);
 
 var client = new Client();
-client.Connect(host, port);
+await client.ConnectAsync(host, port);
 
 _ = Console.ReadLine();
 
-client.Disconect();
+await client.DisconectAsync();
+
+await client.ConnectAsync(host, port);
+
+_ = Console.ReadLine();
+
+await client.DisconectAsync();
+
 server.Stop();

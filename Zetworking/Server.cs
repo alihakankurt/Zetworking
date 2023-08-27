@@ -34,7 +34,7 @@ public sealed class Server
         {
             State = ServerState.Stopped;
             Console.WriteLine("Failed to start server.");
-            return;
+            throw;
         }
 
         State = ServerState.Running;

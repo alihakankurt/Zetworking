@@ -14,7 +14,7 @@ public sealed class Client
         _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
     }
 
-    public void Connect(string host, int port)
+    public async ValueTask ConnectAsync(string host, int port, CancellationToken cancellationToken = default)
     {
         if (State is not ClientState.Disconnected)
             throw new InvalidOperationException("Client is already connected or connecting.");
@@ -24,20 +24,20 @@ public sealed class Client
 
         try
         {
-            _socket.Connect(host, port);
+            await _socket.ConnectAsync(host, port, cancellationToken);
         }
         catch
         {
             State = ClientState.Disconnected;
             Console.WriteLine("Failed to connect.");
-            return;
+            throw;
         }
 
         State = ClientState.Connected;
         Console.WriteLine("Connected to server.");
     }
 
-    public void Disconect()
+    public async ValueTask DisconectAsync(CancellationToken cancellationToken = default)
     {
         if (State is not ClientState.Connected)
             throw new InvalidOperationException("Client is not connected.");
@@ -48,13 +48,13 @@ public sealed class Client
         try
         {
             _socket.Shutdown(SocketShutdown.Both);
-            _socket.Close();
+            await _socket.DisconnectAsync(reuseSocket: true, cancellationToken);
         }
         catch
         {
             State = ClientState.Connected;
             Console.WriteLine("Failed to disconnect.");
-            return;
+            throw;
         }
 
         State = ClientState.Disconnected;
