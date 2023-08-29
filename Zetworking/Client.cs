@@ -10,7 +10,7 @@ public sealed class Client
 
     public ClientState State { get; private set; }
 
-    public Action<ReadOnlyMemory<byte>>? OnBytesReceived { get; set; }
+    public Action<object, Type>? OnPacketReceived { get; set; }
 
     public Client()
     {
@@ -66,16 +66,18 @@ public sealed class Client
         Console.WriteLine("Disconnected from server.");
     }
 
-    public async ValueTask SendAsync(byte[] bytes)
+    public async ValueTask SendAsync(object packet, CancellationToken cancellationToken = default)
     {
         if (State is not ClientState.Connected)
             throw new InvalidOperationException("Client is not connected.");
 
-        Console.WriteLine($"Sending {bytes.Length} bytes to server...");
+        byte[] data = PacketCollection.Prepare(packet);
+
+        Console.WriteLine($"Sending {data.Length} bytes to server...");
 
         try
         {
-            await _socket.SendAsync(bytes, SocketFlags.None);
+            await _socket.SendAsync(data, SocketFlags.None, cancellationToken);
         }
         catch
         {
@@ -93,15 +95,25 @@ public sealed class Client
 
         Console.WriteLine("Starting to receive bytes from server...");
 
-        var buffer = new byte[1024];
+        var sizeBuffer = new byte[2];
 
         while (!_cts.IsCancellationRequested)
         {
             try
             {
-                int length = await _socket.ReceiveAsync(buffer.AsMemory(0), SocketFlags.None, _cts.Token);
-                if (length > 0)
-                    OnBytesReceived?.Invoke(buffer.AsMemory(0, length));
+                int length = await _socket.ReceiveAsync(sizeBuffer.AsMemory(0), SocketFlags.None, _cts.Token);
+                if (length != 2)
+                    continue;
+
+                ushort size = BitConverter.ToUInt16(sizeBuffer, 0);
+                var buffer = new byte[size];
+
+                length = await _socket.ReceiveAsync(buffer.AsMemory(0), SocketFlags.None, _cts.Token);
+                if (length != size)
+                    continue;
+
+                object packet = PacketCollection.Resolve(buffer, out Type packetType);
+                OnPacketReceived?.Invoke(packet, packetType);
             }
             catch
             {

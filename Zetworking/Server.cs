@@ -12,7 +12,7 @@ public sealed class Server
 
     public ServerState State { get; private set; }
 
-    public Action<ReadOnlyMemory<byte>>? OnBytesReceived { get; set; }
+    public Action<object, Type>? OnPacketReceived { get; set; }
 
     public Server()
     {
@@ -69,16 +69,21 @@ public sealed class Server
         Console.WriteLine("Server stopped.");
     }
 
-    public async ValueTask SendAsync(byte[] bytes, CancellationToken cancellationToken = default)
+    public async ValueTask SendAsync(object packet, CancellationToken cancellationToken = default)
     {
         if (State is not ServerState.Running)
             throw new InvalidOperationException("Server is not running.");
 
-        Console.WriteLine($"Sending {bytes.Length} bytes to client...");
+        if (_clientSocket is null)
+            return;
+
+        byte[] data = PacketCollection.Prepare(packet);
+
+        Console.WriteLine($"Sending {data.Length} bytes to client...");
 
         try
         {
-            await _socket.SendAsync(bytes, SocketFlags.None, cancellationToken);
+            await _clientSocket!.SendAsync(data, SocketFlags.None, cancellationToken);
         }
         catch
         {
@@ -102,7 +107,7 @@ public sealed class Server
 
         Console.WriteLine("Starting to receive bytes from client...");
 
-        var buffer = new byte[1024];
+        var sizeBuffer = new byte[2];
 
         while (!_cts.IsCancellationRequested)
         {
@@ -111,9 +116,19 @@ public sealed class Server
 
             try
             {
-                int length = await _clientSocket!.ReceiveAsync(buffer.AsMemory(0), SocketFlags.None, _cts.Token);
-                if (length > 0)
-                    OnBytesReceived?.Invoke(buffer.AsMemory(0, length));
+                int length = await _clientSocket.ReceiveAsync(sizeBuffer.AsMemory(0), SocketFlags.None, _cts.Token);
+                if (length != 2)
+                    continue;
+
+                ushort size = BitConverter.ToUInt16(sizeBuffer, 0);
+                var buffer = new byte[size];
+
+                length = await _clientSocket.ReceiveAsync(buffer.AsMemory(0), SocketFlags.None, _cts.Token);
+                if (length != size)
+                    continue;
+
+                object packet = PacketCollection.Resolve(buffer, out Type packetType);
+                OnPacketReceived?.Invoke(packet, packetType);
             }
             catch
             {

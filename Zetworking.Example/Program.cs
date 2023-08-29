@@ -4,36 +4,55 @@ using Zetworking;
 const string host = "127.0.0.1";
 const int port = 51721;
 
+PacketCollection.Register<MessagePacket>();
+
 var server = new Server
 {
-    OnBytesReceived = static (memory) =>
+    OnPacketReceived = static (packet, type) =>
     {
-        var message = Encoding.UTF8.GetString(memory.Span);
-        Console.WriteLine($"Client: {message}");
+        if (type == typeof(MessagePacket))
+        {
+            var messagePacket = (MessagePacket)packet;
+            Console.WriteLine($"[{messagePacket.CreatedAt.ToLongTimeString()}] Client: {messagePacket.Message}");
+        }
     }
 };
 server.Start(port);
 
 var client = new Client()
 {
-    OnBytesReceived = static (memory) =>
+    OnPacketReceived = static (packet, type) =>
     {
-        var message = Encoding.UTF8.GetString(memory.Span);
-        Console.WriteLine($"Server: {message}");
+        if (type == typeof(MessagePacket))
+        {
+            var messagePacket = (MessagePacket)packet;
+            Console.WriteLine($"[{messagePacket.CreatedAt.ToLongTimeString()}] Server: {messagePacket.Message}");
+        }
     }
 };
 await client.ConnectAsync(host, port);
 
 _ = Console.ReadLine();
 
-await client.SendAsync(Encoding.UTF8.GetBytes("Hello, server!"));
+await client.SendAsync(MessagePacket.Create("Hello, dear server!"));
 
 _ = Console.ReadLine();
 
-await client.SendAsync(Encoding.UTF8.GetBytes("Hello, client!"));
+await server.SendAsync(MessagePacket.Create("Hi, my lovely client!"));
 
 _ = Console.ReadLine();
 
 await client.DisconectAsync();
 
 server.Stop();
+
+class MessagePacket
+{
+    public string Message { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+
+    public static MessagePacket Create(string message)
+    {
+        return new MessagePacket { Message = message, CreatedAt = DateTime.Now };
+    }
+}
