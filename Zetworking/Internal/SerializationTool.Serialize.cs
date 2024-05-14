@@ -1,100 +1,101 @@
-using System.Text;
-using System.Runtime.InteropServices;
+using System;
+using System.IO;
+using System.Reflection;
 
 namespace Zetworking.Internal;
 
 internal static partial class SerializationTool
 {
-    internal static void Serialize(object obj, Span<byte> buffer)
+    internal static void Serialize(BinaryWriter writer, IZetPacket packet)
     {
-        ushort written = 0;
+        ArgumentNullException.ThrowIfNull(packet, nameof(packet));
 
-        var properties = obj.GetType().GetProperties().Where(x => x.CanRead);
+        PropertyInfo[] properties = packet.GetType().GetProperties();
         foreach (var property in properties)
-        {
-            var value = property.GetValue(obj);
-            written += WriteValue(buffer[written..], property.PropertyType, value);
-        }
+            if (property is { CanRead: true, CanWrite: true })
+                WriteValue(writer, property.PropertyType, property.GetValue(packet));
     }
 
-    private static ushort WriteValue(Span<byte> buffer, Type type, object? value)
+    private static void WriteValue(BinaryWriter writer, Type propertyType, object? propertyValue)
     {
-        if (type == typeof(string))
+        if (propertyType == typeof(bool))
         {
-            var @string = (string)value!;
-            int encoded = Encoding.UTF8.GetBytes(@string, buffer[4..]);
-            MemoryMarshal.Write(buffer, ref encoded);
-            return (ushort)(encoded + 4);
+            var value = (bool)propertyValue!;
+            writer.Write(value);
         }
-        else if (type == typeof(bool))
+        else if (propertyType == typeof(sbyte))
         {
-            var @bool = (bool)value!;
-            MemoryMarshal.Write(buffer, ref @bool);
-            return 1;
+            var value = (sbyte)propertyValue!;
+            writer.Write(value);
         }
-        else if (type == typeof(byte))
+        else if (propertyType == typeof(byte))
         {
-            var @byte = (byte)value!;
-            MemoryMarshal.Write(buffer, ref @byte);
-            return 1;
+            var value = (byte)propertyValue!;
+            writer.Write(value);
         }
-        else if (type == typeof(sbyte))
+        else if (propertyType == typeof(short))
         {
-            var @sbyte = (sbyte)value!;
-            MemoryMarshal.Write(buffer, ref @sbyte);
-            return 1;
+            var value = (short)propertyValue!;
+            writer.Write(value);
         }
-        else if (type == typeof(char))
+        else if (propertyType == typeof(ushort))
         {
-            var @char = (char)value!;
-            MemoryMarshal.Write(buffer, ref @char);
-            return 2;
+            var value = (ushort)propertyValue!;
+            writer.Write(value);
         }
-        else if (type == typeof(short))
+        else if (propertyType == typeof(int))
         {
-            var @short = (short)value!;
-            MemoryMarshal.Write(buffer, ref @short);
-            return 2;
+            var value = (int)propertyValue!;
+            writer.Write(value);
         }
-        else if (type == typeof(ushort))
+        else if (propertyType == typeof(uint))
         {
-            var @ushort = (ushort)value!;
-            MemoryMarshal.Write(buffer, ref @ushort);
-            return 2;
+            var value = (uint)propertyValue!;
+            writer.Write(value);
         }
-        else if (type == typeof(int))
+        else if (propertyType == typeof(long))
         {
-            var @int = (int)value!;
-            MemoryMarshal.Write(buffer, ref @int);
-            return 4;
+            var value = (long)propertyValue!;
+            writer.Write(value);
         }
-        else if (type == typeof(uint))
+        else if (propertyType == typeof(ulong))
         {
-            var @uint = (uint)value!;
-            MemoryMarshal.Write(buffer, ref @uint);
-            return 4;
+            var value = (ulong)propertyValue!;
+            writer.Write(value);
         }
-        else if (type == typeof(long))
+        else if (propertyType == typeof(float))
         {
-            var @long = (long)value!;
-            MemoryMarshal.Write(buffer, ref @long);
-            return 8;
+            var value = (float)propertyValue!;
+            writer.Write(value);
         }
-        else if (type == typeof(ulong))
+        else if (propertyType == typeof(double))
         {
-            var @ulong = (ulong)value!;
-            MemoryMarshal.Write(buffer, ref @ulong);
-            return 8;
+            var value = (double)propertyValue!;
+            writer.Write(value);
         }
-        else if (type == typeof(DateTime))
+        else if (propertyType == typeof(decimal))
         {
-            var dateTime = (DateTime)value!;
-            MemoryMarshal.Write(buffer, ref dateTime);
-            return 8;
+            var value = (decimal)propertyValue!;
+            writer.Write(value);
+        }
+        else if (propertyType == typeof(char))
+        {
+            var value = (char)propertyValue!;
+            writer.Write(value);
+        }
+        else if (propertyType == typeof(string))
+        {
+            var value = (string)propertyValue!;
+            writer.Write(value);
+        }
+        else if (propertyType == typeof(DateTime))
+        {
+            var value = (DateTime)propertyValue!;
+            writer.Write(value.ToBinary());
         }
         else
         {
-            return 0;
+            throw new NotSupportedException($"Type {propertyType} is not supported.");
         }
     }
 }

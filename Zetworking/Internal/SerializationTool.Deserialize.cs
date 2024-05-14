@@ -1,92 +1,87 @@
-using System.Text;
-using System.Runtime.InteropServices;
+using System;
+using System.IO;
+using System.Reflection;
 
 namespace Zetworking.Internal;
 
 internal static partial class SerializationTool
 {
-    internal static object Deserialize(Type type, ReadOnlySpan<byte> data)
+    internal static void Deserialize(BinaryReader reader, Type packetType, out IZetPacket packet)
     {
-        var obj = Activator.CreateInstance(type);
-        ushort read = 0;
+        packet = Activator.CreateInstance(packetType) as IZetPacket
+            ?? throw new InvalidOperationException($"Packet must implement {nameof(IZetPacket)}.");
 
-        var properties = type.GetProperties().Where(x => x.CanWrite);
+        PropertyInfo[] properties = packetType.GetProperties();
         foreach (var property in properties)
-        {
-            read += ReadValue(data[read..], property.PropertyType, out var value);
-            property.SetValue(obj, value);
-        }
-
-        return obj!;
+            if (property is { CanRead: true, CanWrite: true })
+                property.SetValue(packet, ReadValue(reader, property.PropertyType));
     }
 
-    private static ushort ReadValue(ReadOnlySpan<byte> data, Type type, out object? value)
+    private static object ReadValue(BinaryReader reader, Type propertyType)
     {
-        if (type == typeof(string))
+        if (propertyType == typeof(bool))
         {
-            int encoded = MemoryMarshal.Read<int>(data);
-            value = Encoding.UTF8.GetString(data[4..(4 + encoded)]);
-            return (ushort)(encoded + 4);
+            return reader.ReadBoolean();
         }
-        else if (type == typeof(bool))
+        else if (propertyType == typeof(sbyte))
         {
-            value = MemoryMarshal.Read<bool>(data);
-            return 1;
+            return reader.ReadSByte();
         }
-        else if (type == typeof(byte))
+        else if (propertyType == typeof(byte))
         {
-            value = MemoryMarshal.Read<byte>(data);
-            return 1;
+            return reader.ReadByte();
         }
-        else if (type == typeof(sbyte))
+        else if (propertyType == typeof(short))
         {
-            value = MemoryMarshal.Read<sbyte>(data);
-            return 1;
+            return reader.ReadInt16();
         }
-        else if (type == typeof(char))
+        else if (propertyType == typeof(ushort))
         {
-            value = MemoryMarshal.Read<char>(data);
-            return 2;
+            return reader.ReadUInt16();
         }
-        else if (type == typeof(short))
+        else if (propertyType == typeof(int))
         {
-            value = MemoryMarshal.Read<short>(data);
-            return 2;
+            return reader.ReadInt32();
         }
-        else if (type == typeof(ushort))
+        else if (propertyType == typeof(uint))
         {
-            value = MemoryMarshal.Read<ushort>(data);
-            return 2;
+            return reader.ReadUInt32();
         }
-        else if (type == typeof(int))
+        else if (propertyType == typeof(long))
         {
-            value = MemoryMarshal.Read<int>(data);
-            return 4;
+            return reader.ReadInt64();
         }
-        else if (type == typeof(uint))
+        else if (propertyType == typeof(ulong))
         {
-            value = MemoryMarshal.Read<uint>(data);
-            return 4;
+            return reader.ReadUInt64();
         }
-        else if (type == typeof(long))
+        else if (propertyType == typeof(float))
         {
-            value = MemoryMarshal.Read<long>(data);
-            return 8;
+            return reader.ReadSingle();
         }
-        else if (type == typeof(ulong))
+        else if (propertyType == typeof(double))
         {
-            value = MemoryMarshal.Read<ulong>(data);
-            return 8;
+            return reader.ReadDouble();
         }
-        else if (type == typeof(DateTime))
+        else if (propertyType == typeof(decimal))
         {
-            value = MemoryMarshal.Read<DateTime>(data);
-            return 8;
+            return reader.ReadDecimal();
+        }
+        else if (propertyType == typeof(char))
+        {
+            return reader.ReadChar();
+        }
+        else if (propertyType == typeof(string))
+        {
+            return reader.ReadString();
+        }
+        else if (propertyType == typeof(DateTime))
+        {
+            return DateTime.FromBinary(reader.ReadInt64());
         }
         else
         {
-            value = default;
-            return 0;
+            throw new NotSupportedException($"Type {propertyType} is not supported.");
         }
     }
 }

@@ -1,52 +1,41 @@
-﻿using System.Text;
+﻿using System.Net;
 using Zetworking;
 
-const string host = "127.0.0.1";
+IPAddress ipAddress = Dns.GetHostEntry(Dns.GetHostName()).AddressList[0];
+Console.WriteLine($"IP Address: {ipAddress}");
 const int port = 51721;
 
-PacketCollection.Register<MessagePacket>();
+ZetPacketCollection.Register(typeof(MessagePacket));
 
-var server = new Server
+using var server = new ZetNode
 {
     OnPacketReceived = static (packet, type) =>
     {
         if (type == typeof(MessagePacket))
         {
             var messagePacket = (MessagePacket)packet;
-            Console.WriteLine($"[{messagePacket.CreatedAt.ToLongTimeString()}] Client: {messagePacket.Message}");
+            Console.WriteLine($"[{messagePacket.CreatedAt.ToLongTimeString()}] {messagePacket.Message}");
         }
     }
 };
+
+using var client = new ZetNode();
+
 server.Start(port);
+client.Start();
 
-var client = new Client()
+var endPoint = new IPEndPoint(ipAddress, port);
+
+while (true)
 {
-    OnPacketReceived = static (packet, type) =>
-    {
-        if (type == typeof(MessagePacket))
-        {
-            var messagePacket = (MessagePacket)packet;
-            Console.WriteLine($"[{messagePacket.CreatedAt.ToLongTimeString()}] Server: {messagePacket.Message}");
-        }
-    }
-};
-await client.ConnectAsync(host, port);
+    var message = Console.ReadLine();
+    if (string.IsNullOrEmpty(message))
+        break;
 
-_ = Console.ReadLine();
+    await client.SendAsync(MessagePacket.Create(message), endPoint);
+}
 
-await client.SendAsync(MessagePacket.Create("Hello, dear server!"));
-
-_ = Console.ReadLine();
-
-await server.SendAsync(MessagePacket.Create("Hi, my lovely client!"));
-
-_ = Console.ReadLine();
-
-await client.DisconectAsync();
-
-server.Stop();
-
-class MessagePacket
+public sealed class MessagePacket : IZetPacket
 {
     public string Message { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
